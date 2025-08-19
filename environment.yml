@@ -1,0 +1,24 @@
+name: cogsci-proj
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - geopandas==1.1.1
+  - matplotlib==3.10.0
+  - matplotlib-inline==0.1.7
+  - matplotlib-venn==1.1.2
+  - numpy==2.0.2
+  - pandas==2.2.2
+  - pandas-datareader==0.10.0
+  - pandas-stubs==2.2.2.240909
+  - scikit-learn==1.6.1
+  - scipy==1.16.1
+  - seaborn==0.13.2
+  - sklearn-pandas==2.2.0
+  - tqdm
+  - pip
+  - pip:
+      - pandas-gbq==0.29.2
+      - pygam
+      - tqdm==4.66.5
