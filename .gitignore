@@ -9,3 +9,4 @@ results/
 *.pt
 *.pth
 *.h5
+.DS_Store
