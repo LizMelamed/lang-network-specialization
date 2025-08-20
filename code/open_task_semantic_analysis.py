@@ -1,29 +1,48 @@
 import pandas as pd
 import numpy as np
-from scipy import stats
-from pygam import LinearGAM, s
 import warnings
 warnings.filterwarnings("ignore")
-import math
-from typing import Dict, List, Tuple
-from tqdm import tqdm
+import matplotlib as mpl
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
 import seaborn as sns
-import re
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
-from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_similarity
 from collections import Counter, defaultdict
 rng = np.random.default_rng(42)
 import os
+import re
+
+mpl.rcParams.update({
+    "figure.dpi": 150,
+    "savefig.dpi": 300,         
+    "font.size": 16,            
+    "axes.titlesize": 20,
+    "axes.labelsize": 18,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "legend.fontsize": 14,
+    "figure.titlesize": 22,
+})
 
 def main():
 
     VEC_PATH = "data/merged_df_with_vectors.parquet"  # Path to the merged DataFrame with GloVe vectors
-    RESULTS_DIR = "results"
+
+    RESULTS_DIR = "results/semantic"
     os.makedirs(RESULTS_DIR, exist_ok=True)
+    def _ensure_dir(d):
+        os.makedirs(d, exist_ok=True)
+
+    def _slug(s: str) -> str:
+        return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(s)).strip("_")
+
+    def _savefig(fig, filename, subdir=None, dpi=300):
+        out_dir = RESULTS_DIR if subdir is None else os.path.join(RESULTS_DIR, subdir)
+        _ensure_dir(out_dir)
+        path = os.path.join(out_dir, _slug(filename))
+        fig.savefig(path, dpi=dpi, bbox_inches="tight")
+        print(f" Saved: {path}")
 
     merged_df_with_vectors = pd.read_parquet(VEC_PATH) # import the data with the GloVe vectors
 
@@ -41,6 +60,17 @@ def main():
                 return np.array(vector_str)
         except:
             return None
+
+    _WORD_RE = re.compile(r"[A-Za-z']+")
+
+    def tokenize_chunks(x):
+        """Split a chunk/sequence of words into individual tokens.
+        - keeps letters and apostrophes (don’t -> dont if you prefer, post-process)
+        - lowercases
+        """
+        if x is None or str(x) == 'nan':
+            return []
+        return [w.lower() for w in _WORD_RE.findall(str(x))]
 
     def extract_story_semantic_data(df):
         print(" EXTRACTING SEMANTIC DATA FOR EACH STORY")
@@ -61,8 +91,10 @@ def main():
                 found_words_val = row['found_words']
                 if found_words_val is not None and str(found_words_val) != 'nan':
                     # Parse words (comma-separated)
-                    words = str(found_words_val).split(',')
-                    words = [w.strip().lower() for w in words if w.strip()]
+                    chunks = str(found_words_val).split(',')        
+                    words  = []
+                    for ch in chunks:
+                        words.extend(tokenize_chunks(ch))
 
                     # Parse individual word vectors
                     word_vectors_val = row['word_vectors']
@@ -181,104 +213,94 @@ def main():
         return similarity_matrix, story_names
 
     def plot_story_semantic_analysis(profiles, similarity_matrix, story_names):
-
-        print("\n CREATING SEMANTIC VISUALIZATIONS (separate files)")
+        print("\n CREATING SEMANTIC VISUALIZATIONS")
         print("-" * 50)
 
-        # 1. Story similarity heatmap
-        plt.figure(figsize=(10, 8))
+        # 1) Story similarity heatmap (single figure)
+        fig, ax = plt.subplots(figsize=(11, 9))
         sns.heatmap(similarity_matrix,
                     xticklabels=story_names,
                     yticklabels=story_names,
-                    annot=True,
-                    cmap='viridis',
-                    fmt='.2f')
-        plt.title('Story Semantic Similarity\n(Cosine Similarity)', fontweight='bold')
-        plt.xticks(rotation=45)
+                    annot=True, annot_kws={"size": 10},
+                    cmap='viridis', fmt='.2f', ax=ax)
+        ax.set_title('Story Semantic Similarity (Cosine)')
+        ax.set_xlabel('Story')
+        ax.set_ylabel('Story')
+        plt.xticks(rotation=45, ha='right')
         plt.yticks(rotation=0)
-        out_path = os.path.join(RESULTS_DIR, "semantic_similarity_heatmap.png")
-        plt.savefig(out_path, dpi=300, bbox_inches='tight')
-        print(f"✅ Saved: {out_path}")
-        plt.close()
+        _savefig(fig, "semantic_similarity_heatmap.png")
+        plt.close(fig)
 
-        # 2. Semantic diversity vs coherence
-        plt.figure(figsize=(8, 6))
+        # 2) Semantic coherence vs diversity (scatter, single figure)
+        fig, ax = plt.subplots(figsize=(9, 7))
         coherence_vals = [profiles[s]['semantic_coherence'] for s in story_names]
-        diversity_vals = [profiles[s]['semantic_diversity'] for s in story_names]
-
-        plt.scatter(coherence_vals, diversity_vals, s=100, alpha=0.7)
+        diversity_vals =  [profiles[s]['semantic_diversity']  for s in story_names]
+        ax.scatter(coherence_vals, diversity_vals, s=110, alpha=0.8)
         for i, story in enumerate(story_names):
-            plt.annotate(story, (coherence_vals[i], diversity_vals[i]),
-                        xytext=(5, 5), textcoords='offset points', fontsize=9)
-        plt.xlabel('Semantic Coherence')
-        plt.ylabel('Semantic Diversity')
-        plt.title('Story Semantic Characteristics', fontweight='bold')
-        plt.grid(True, alpha=0.3)
-        out_path = os.path.join(RESULTS_DIR, "semantic_characteristics.png")
-        plt.savefig(out_path, dpi=300, bbox_inches='tight')
-        print(f"✅ Saved: {out_path}")
-        plt.close()
+            ax.annotate(story, (coherence_vals[i], diversity_vals[i]),
+                        xytext=(6, 6), textcoords='offset points', fontsize=12)
+        ax.set_xlabel('Semantic Coherence')
+        ax.set_ylabel('Semantic Diversity')
+        ax.set_title('Story Semantic Characteristics')
+        ax.grid(True, alpha=0.3)
+        _savefig(fig, "semantic_characteristics.png")
+        plt.close(fig)
 
-        # 3. Vocabulary size comparison
-        plt.figure(figsize=(10, 6))
+        # 3) Vocabulary size by story (single figure)
+        fig, ax = plt.subplots(figsize=(12, 7))
         vocab_sizes = [profiles[s]['vocabulary_size'] for s in story_names]
-        bars = plt.bar(range(len(story_names)), vocab_sizes, alpha=0.7,
-                    color=plt.cm.Set3(np.linspace(0, 1, len(story_names))))
-        plt.xticks(range(len(story_names)), story_names, rotation=45)
-        plt.ylabel('Unique Words')
-        plt.title('Vocabulary Size by Story', fontweight='bold')
-
+        bars = ax.bar(range(len(story_names)), vocab_sizes,
+                    color=plt.cm.Set3(np.linspace(0, 1, len(story_names))), alpha=0.9)
+        ax.set_xticks(range(len(story_names)))
+        ax.set_xticklabels(story_names, rotation=45, ha='right')
+        ax.set_ylabel('Unique Words')
+        ax.set_title('Vocabulary Size by Story')
         for i, bar in enumerate(bars):
-            height = bar.get_height()
-            plt.text(bar.get_x() + bar.get_width()/2., height + 10,
-                    f'{int(height)}', ha='center', va='bottom', fontsize=9)
-        out_path = os.path.join(RESULTS_DIR, "vocabulary_size.png")
-        plt.savefig(out_path, dpi=300, bbox_inches='tight')
-        print(f"✅ Saved: {out_path}")
-        plt.close()
+            h = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., h + max(2, 0.01*h),
+                    f'{int(h)}', ha='center', va='bottom', fontsize=12)
+        ax.grid(True, axis='y', alpha=0.25)
+        _savefig(fig, "vocabulary_size.png")
+        plt.close(fig)
 
-        # 4. PCA visualization of story vectors
-        plt.figure(figsize=(8, 6))
+        # 4) PCA of story mean vectors (single figure)
         story_vectors = np.array([profiles[story]['mean_vector'] for story in story_names])
         if len(story_vectors) > 1:
             pca = PCA(n_components=2)
             story_pca = pca.fit_transform(story_vectors)
-
-            plt.scatter(story_pca[:, 0], story_pca[:, 1], s=100, alpha=0.7,
-                        c=range(len(story_names)), cmap='tab10')
+            fig, ax = plt.subplots(figsize=(9, 7))
+            sc = ax.scatter(story_pca[:, 0], story_pca[:, 1], s=110, alpha=0.85,
+                            c=range(len(story_names)), cmap='tab10')
             for i, story in enumerate(story_names):
-                plt.annotate(story, (story_pca[i, 0], story_pca[i, 1]),
-                            xytext=(5, 5), textcoords='offset points', fontsize=9)
-            plt.xlabel(f'PC1 ({pca.explained_variance_ratio_[0]:.1%} var)')
-            plt.ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.1%} var)')
-            plt.title('Story Semantic Space (PCA)', fontweight='bold')
-            plt.grid(True, alpha=0.3)
-            out_path = os.path.join(RESULTS_DIR, "semantic_pca.png")
-            plt.savefig(out_path, dpi=300, bbox_inches='tight')
-            print(f"✅ Saved: {out_path}")
-        plt.close()
+                ax.annotate(story, (story_pca[i, 0], story_pca[i, 1]),
+                            xytext=(6, 6), textcoords='offset points', fontsize=12)
+            ax.set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]:.1%} var)')
+            ax.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.1%} var)')
+            ax.set_title('Story Semantic Space (PCA)')
+            ax.grid(True, alpha=0.3)
+            _savefig(fig, "semantic_pca.png")
+            plt.close(fig)
 
-        # 5. Top words for each story
+        # 5) Top words per story (one figure per story)
         for story in story_names:
-            plt.figure(figsize=(8, 6))
             top_words = profiles[story]['top_words'][:10]
-            words = [w[0] for w in top_words]
-            counts = [w[1] for w in top_words]
+            if not top_words:
+                continue
+            words  = [w for w, _ in top_words]
+            counts = [c for _, c in top_words]
 
-            bars = plt.barh(range(len(words)), counts, alpha=0.7)
-            plt.yticks(range(len(words)), words)
-            plt.xlabel('Word Frequency')
-            plt.title(f'Top Words: {story}', fontweight='bold', fontsize=10)
-            plt.gca().invert_yaxis()
-
-            max_count = max(counts) if counts else 1
+            fig, ax = plt.subplots(figsize=(9, 7))
+            bars = ax.barh(range(len(words)), counts, alpha=0.9)
+            ax.set_yticks(range(len(words)))
+            ax.set_yticklabels(words)
+            ax.set_xlabel('Word Frequency')
+            ax.set_title(f'Top Words: {story}')
+            ax.invert_yaxis()
+            max_c = max(counts) if counts else 1
             for j, bar in enumerate(bars):
-                bar.set_color(plt.cm.Blues(0.3 + 0.7 * counts[j] / max_count))
-
-            out_path = os.path.join(RESULTS_DIR, f"top_words_{story}.png")
-            plt.savefig(out_path, dpi=300, bbox_inches='tight')
-            print(f"✅ Saved: {out_path}")
-            plt.close()
+                bar.set_color(plt.cm.Blues(0.25 + 0.75 * counts[j] / max_c))
+            _savefig(fig, f"top_words_{story}.png", subdir="top_words")
+            plt.close(fig)
 
 
     def create_semantic_story_summary(profiles):
@@ -425,54 +447,36 @@ def main():
         story_data = df[df['docid'] == story_id].copy()
         unique_frois = story_data['fROI'].unique()
 
-        story_avg = story_data.groupby(['time', 'fROI'])['BOLD'].agg(['mean', 'std', 'count']).reset_index()
-        story_avg.columns = ['time', 'fROI', 'bold_mean', 'bold_std', 'n_subjects']
+        # Pre-aggregate (mean, SE) per fROI × time
+        story_avg = (story_data
+                    .groupby(['time', 'fROI'])['BOLD']
+                    .agg(['mean', 'std', 'count'])
+                    .reset_index())
+        story_avg['se'] = story_avg['std'] / np.sqrt(story_avg['count'])
 
-        story_avg['bold_se'] = story_avg['bold_std'] / np.sqrt(story_avg['n_subjects'])
+        # One figure per fROI
+        for froi in unique_frois:
+            rd = story_avg[story_avg['fROI'] == froi].sort_values('time')
+            if rd.empty:
+                continue
 
-        n_regions = len(unique_frois)
-        fig, axes = plt.subplots(2, 3, figsize=(18, 12))
-        fig.suptitle(f'BOLD Response Progression: {story_id}', fontsize=16, fontweight='bold')
+            fig, ax = plt.subplots(figsize=(10, 6.5))
+            ax.plot(rd['time'], rd['mean'], linewidth=2.6, marker='o', markersize=5, alpha=0.9)
+            ax.fill_between(rd['time'], rd['mean'] - rd['se'], rd['mean'] + rd['se'], alpha=0.3)
+            ax.set_title(f'BOLD Progression — {story_id} — {froi}')
+            ax.set_xlabel('Time (story progression)')
+            ax.set_ylabel('BOLD')
+            ax.grid(True, alpha=0.3)
 
-        axes = axes.flatten()
+            rng_val = (rd['mean'].max() - rd['mean'].min())
+            mu_val  = rd['mean'].mean()
+            ax.text(0.02, 0.98, f'Range: {rng_val:.3f}\nMean: {mu_val:.3f}',
+                    transform=ax.transAxes, fontsize=12, va='top',
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.85))
 
-        for i, froi in enumerate(unique_frois):
-            if i >= len(axes):
-                break
-
-            region_data = story_avg[story_avg['fROI'] == froi].copy()
-            region_data = region_data.sort_values('time')
-
-            axes[i].plot(region_data['time'], region_data['bold_mean'],
-                        linewidth=2, marker='o', markersize=3, alpha=0.8)
-            axes[i].fill_between(region_data['time'],
-                                region_data['bold_mean'] - region_data['bold_se'],
-                                region_data['bold_mean'] + region_data['bold_se'],
-                                alpha=0.3)
-
-            axes[i].set_title(f'{froi}', fontweight='bold', fontsize=12)
-            axes[i].set_xlabel('Time (story progression)')
-            axes[i].set_ylabel('BOLD Response')
-            axes[i].grid(True, alpha=0.3)
-
-            bold_range = region_data['bold_mean'].max() - region_data['bold_mean'].min()
-            bold_mean = region_data['bold_mean'].mean()
-            axes[i].text(0.02, 0.98, f'Range: {bold_range:.3f}\nMean: {bold_mean:.3f}',
-                        transform=axes[i].transAxes, fontsize=9,
-                        verticalalignment='top',
-                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-
-        for i in range(len(unique_frois), len(axes)):
-            fig.delaxes(axes[i])
-
-        plt.tight_layout()
-
-        if save_plots:
-            out_path = os.path.join(RESULTS_DIR, f"story_progression_{story_id}.png")
-            plt.savefig(out_path, dpi=300, bbox_inches='tight')
-            print(f"✅ Saved: {out_path}")
-
-        plt.close(fig)  # safer than plt.show() if running many plots
+            if save_plots:
+                _savefig(fig, f"story_progression_{story_id}_{froi}.png", subdir="story_progression")
+            plt.close(fig)
 
         return story_avg
 
@@ -531,39 +535,30 @@ def main():
 
         return story_stats
 
-    def create_summary_heatmap(stats_df, save_plots=True, download_plots=True):
-        mean_pivot = stats_df.pivot(index='fROI', columns='docid', values='Mean')
+    def create_summary_heatmap(stats_df, save_plots=True):
+        mean_pivot  = stats_df.pivot(index='fROI', columns='docid', values='Mean')
         range_pivot = stats_df.pivot(index='fROI', columns='docid', values='Range')
 
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
-
-        # Mean BOLD heatmap
+        # Mean heatmap
+        fig, ax = plt.subplots(figsize=(12.5, 9))
         sns.heatmap(mean_pivot, annot=True, fmt='.3f', cmap='RdBu_r',
-                    center=0, ax=ax1, cbar_kws={'label': 'Mean BOLD'})
-        ax1.set_title('Mean BOLD Response by Region and Story', fontweight='bold')
-        ax1.set_ylabel('Brain Region (fROI)')
-        ax1.set_xlabel('Story')
+                    center=0, ax=ax, cbar_kws={'label': 'Mean BOLD'})
+        ax.set_title('Mean BOLD Response by Region and Story')
+        ax.set_ylabel('Brain Region (fROI)')
+        ax.set_xlabel('Story')
+        plt.xticks(rotation=45, ha='right')
+        _savefig(fig, "bold_mean_heatmap.png", subdir="summary_heatmaps")
+        plt.close(fig)
 
-        # BOLD range heatmap
+        # Range heatmap
+        fig, ax = plt.subplots(figsize=(12.5, 9))
         sns.heatmap(range_pivot, annot=True, fmt='.3f', cmap='viridis',
-                    ax=ax2, cbar_kws={'label': 'BOLD Range'})
-        ax2.set_title('BOLD Response Range by Region and Story', fontweight='bold')
-        ax2.set_ylabel('Brain Region (fROI)')
-        ax2.set_xlabel('Story')
-
-        plt.tight_layout()
-
-        if save_plots:
-            out_path = os.path.join(RESULTS_DIR, "bold_summary_heatmaps.png")
-            plt.savefig(out_path, dpi=300, bbox_inches='tight')
-            print(f"✅ Saved heatmaps: {out_path}")
-
-            if download_plots:
-                try:
-                    files.download(out_path)
-                except Exception:
-                    print("⚠️ Download only works inside Google Colab")
-
+                    ax=ax, cbar_kws={'label': 'BOLD Range'})
+        ax.set_title('BOLD Response Range by Region and Story')
+        ax.set_ylabel('Brain Region (fROI)')
+        ax.set_xlabel('Story')
+        plt.xticks(rotation=45, ha='right')
+        _savefig(fig, "bold_range_heatmap.png", subdir="summary_heatmaps")
         plt.close(fig)
 
     def correlation_analysis(df):

@@ -4,7 +4,9 @@ This project investigates how different regions within the human language networ
 
 ## Overview
 
-This repository contains code and analysis for a computational psycholinguistics study that challenges assumptions about uniform complexity processing in the language network. Our research reveals functional specialization across brain regions and discovers a surprising semantic processing paradox.
+This repository contains code and analysis for a computational psycholinguistics study that challenges assumptions about uniform complexity processing in the language network. Our research reveals functional specialization across brain regions and uncovers a surprising semantic processing paradox.  
+
+The provided code is focused on the **analysis** itself. If you would like to see how the **GPT-2 surprisal values** or the **GloVe embeddings** were derived, please refer to the accompanying Jupyter notebooks, where the data generation process is fully documented.
 
 ### Key Research Questions
 
@@ -47,10 +49,10 @@ This repository contains code and analysis for a computational psycholinguistics
    conda activate cogsci-proj
    ```
 
-4. **Download the Natural Stories fMRI data**:
-   - Primary dataset: [Shain et al. (2020) OSF Repository](https://osf.io/eyp8q/)
-   - Pereira et al. (2018) 
-   - Place data files in the `data/` directory as described below
+4. **Download the Data With Ready-to-Use GloVe Vectors**:
+   ```bash
+   python code/data_download.py
+   ```
 
 ## Usage
 
@@ -96,11 +98,12 @@ jupyter notebook notebooks/Open_Task_Surprisal.ipynb
 │   └── utils/                             # Helper functions
 ├── data/                           # Input datasets
 │   ├── LANG_MD_ts_X.csv                   # Combined predictors (PCFG, 5-gram surprisal)
-│   ├── LANG_MD_y_train.csv               # Combined BOLD responses (LANG + MD networks)  
+│   ├── LANG_MD_y_train.csv                # Combined BOLD responses (LANG + MD networks)  
 │   ├── pred_use.csv                       # Preprocessed predictor variables
 │   ├── resp_use.csv                       # Preprocessed brain response data
 │   ├── merged.csv                         # Combined analysis-ready dataset
-│   └── gpt2_surprisal_results.csv         # GPT-2 surprisal computations
+│   ├── gpt2_surprisal_results.csv         # GPT-2 surprisal computations
+│   └── merged_df_with_vectors.parquet     # Generated dataset (appears after running data_download.py)
 ├── notebooks/                      # Jupyter notebooks  
 │   ├── Closed_Task1.ipynb                 # Structured Task 1: FastText vs GloVe decoding
 │   ├── Closed_Task2.ipynb                 # Structured Task 2: Static vs contextual embeddings
@@ -117,6 +120,7 @@ jupyter notebook notebooks/Open_Task_Surprisal.ipynb
 │   └── surprisal_overview.png            # Summary visualizations
 ├── environment.yml                 # Conda environment specification
 └── README.md                      # This file
+
 ```
 
 ## Data Description
@@ -260,6 +264,6 @@ Pereira, F., Lou, B., Pritchett, B., Ritter, S., Gershman, S. J., Kanwisher, N.,
 
 **Contact**: For questions about this analysis, to report issues, or to request access to processed data outputs, please open a GitHub issue or contact the project maintainers at elizavetam@campus.technion.ac.il or noabamberger@campus.technion.ac.il.
 
-**GitHub Repository**: [\[Insert final repository link here\]](https://github.com/LizMelamed/lang-network-specialization.git)
+**GitHub Repository**: [\[(https://github.com/LizMelamed/lang-network-specialization.git)\]]
 
 **Academic Affiliation**: Data and Decision Sciences, Technion - Israel Institute of Technology

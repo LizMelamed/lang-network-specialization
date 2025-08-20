@@ -3,18 +3,24 @@ import os
 import re
 import numpy as np
 from scipy import stats
-from pygam import LinearGAM, s
 import warnings
 warnings.filterwarnings("ignore")
-import math
-from typing import Dict, List, Tuple
-from tqdm import tqdm
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
-import seaborn as sns
 from scipy.stats import pearsonr
 
-
+mpl.rcParams.update({
+    "figure.dpi": 150,
+    "savefig.dpi": 300,          
+    "font.size": 16,            
+    "axes.titlesize": 20,
+    "axes.labelsize": 18,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "legend.fontsize": 14,
+    "figure.titlesize": 22,
+})
 
 def main():
     # Paths to your prepared files
@@ -26,8 +32,7 @@ def main():
     pred_use = pd.read_csv(PRED_PATH)
     resp_use = pd.read_csv(RESP_PATH)
 
-    # --- saving helpers ---
-    SAVE_DIR = "results"
+    SAVE_DIR = "results/surprisal"
 
     def _ensure_dir(d):
         os.makedirs(d, exist_ok=True)
@@ -35,7 +40,7 @@ def main():
     def _slug(s: str) -> str:
         return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(s)).strip("_")
 
-    def _savefig(fig, filename, save_dir=SAVE_DIR, dpi=150):
+    def _savefig(fig, filename, save_dir=SAVE_DIR, dpi=300):
         _ensure_dir(save_dir)
         path = os.path.join(save_dir, _slug(filename))
         fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -350,62 +355,64 @@ def main():
 
     def plot_surprisal_overview(df, save_dir=SAVE_DIR):
         _ensure_cols(df, ['totsurp_hrf','fwprob5surp_hrf','gpt2_surp_hrf'])
-        fig, axes = plt.subplots(3, 3, figsize=(18,16))
 
-        # Distributions
-        axes[0,0].hist(df['totsurp_hrf'], bins=50, alpha=0.9, color=COL_PCFG)
-        axes[0,0].set_title('PCFG Surprisal — Distribution')
-        axes[0,0].set_xlabel('Surprisal'); axes[0,0].set_ylabel('Frequency')
+        # --- Single-figure helpers ---
+        def _hist_one(col, title, color, fname):
+            fig, ax = plt.subplots(figsize=(8,6))
+            ax.hist(df[col].dropna(), bins=60, alpha=0.95, color=color, edgecolor="none")
+            ax.set_title(title)
+            ax.set_xlabel("Surprisal")
+            ax.set_ylabel("Frequency")
+            ax.grid(True, axis="y", alpha=0.25)
+            _savefig(fig, fname, save_dir)
+            plt.close(fig)
 
-        axes[0,1].hist(df['fwprob5surp_hrf'], bins=50, alpha=0.9, color=COL_G5)
-        axes[0,1].set_title('5-gram Surprisal — Distribution')
-        axes[0,1].set_xlabel('Surprisal'); axes[0,1].set_ylabel('Frequency')
-
-        axes[0,2].hist(df['gpt2_surp_hrf'], bins=50, alpha=0.9, color=COL_GPT2)
-        axes[0,2].set_title('GPT-2 Surprisal — Distribution')
-        axes[0,2].set_xlabel('Surprisal'); axes[0,2].set_ylabel('Frequency')
-
-        # Pairwise scatters with r & P
-        def _rp_box(ax, r, p, loc=(0.05, 0.93)):
-            ax.text(loc[0], loc[1], f"r={r:.3f}, p={p:.3g}",
-                    transform=ax.transAxes, fontsize=10,
-                    bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.75))
-
-        def _scatter(ax, x, y, labelx, labely):
-            xm, ym = df[x].values, df[y].values
-            m = np.isfinite(xm) & np.isfinite(ym)
-            ax.scatter(xm[m], ym[m], s=4, alpha=0.25, color="black")
+        def _scatter_one(xcol, ycol, xt, yt, fname):
+            fig, ax = plt.subplots(figsize=(8,6))
+            x = df[xcol].values
+            y = df[ycol].values
+            m = np.isfinite(x) & np.isfinite(y)
+            ax.scatter(x[m], y[m], s=6, alpha=0.25, color="black")
             try:
-                r, p = pearsonr(xm[m], ym[m])
-                _rp_box(ax, r, p)
+                r, p = pearsonr(x[m], y[m])
+                ax.text(0.03, 0.95, f"r={r:.3f}, p={p:.3g}", transform=ax.transAxes,
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", edgecolor="black", alpha=0.85))
             except Exception:
                 pass
-            ax.set_title(f'{labelx} vs {labely} Surprisal')
-            ax.set_xlabel(f'{labelx} Surprisal'); ax.set_ylabel(f'{labely} Surprisal')
+            ax.set_title(f"{xt} vs {yt} Surprisal")
+            ax.set_xlabel(f"{xt} Surprisal")
+            ax.set_ylabel(f"{yt} Surprisal")
             ax.grid(True, alpha=0.3)
+            _savefig(fig, fname, save_dir)
+            plt.close(fig)
 
-        _scatter(axes[1,0], 'totsurp_hrf','fwprob5surp_hrf', 'PCFG','5-gram')
-        _scatter(axes[1,1], 'totsurp_hrf','gpt2_surp_hrf',  'PCFG','GPT-2')
-        _scatter(axes[1,2], 'fwprob5surp_hrf','gpt2_surp_hrf','5-gram','GPT-2')
+        def _bin_count_one(bin_col, title, color, fname):
+            if bin_col not in df.columns:
+                return
+            vc = df[bin_col].value_counts().sort_index()
+            fig, ax = plt.subplots(figsize=(8,6))
+            ax.bar(vc.index.astype(float), vc.values, alpha=0.95, color=color)
+            ax.set_title(title)
+            ax.set_xlabel("Surprisal Bin")
+            ax.set_ylabel("Count")
+            ax.grid(True, axis="y", alpha=0.3)
+            _savefig(fig, fname, save_dir)
+            plt.close(fig)
 
-        # Bin counts
-        for ax, col, title, colr in [
-            (axes[2,0], 'totsurp_hrf_bin', 'PCFG Surprisal — Bin Counts', COL_PCFG),
-            (axes[2,1], 'fwprob5surp_hrf_bin', '5-gram Surprisal — Bin Counts', COL_G5),
-            (axes[2,2], 'gpt2_surp_hrf_bin', 'GPT-2 Surprisal — Bin Counts', COL_GPT2),
-        ]:
-            if col in df:
-                vc = df[col].value_counts().sort_index()
-                ax.bar(vc.index.astype(float), vc.values, alpha=0.9, color=colr)
-                ax.set_title(title)
-                ax.set_xlabel('Surprisal Bin'); ax.set_ylabel('Count')
-                ax.grid(True, axis='y', alpha=0.3)
-            else:
-                ax.set_visible(False)
+        # --- Distributions (3 separate figures) ---
+        _hist_one('totsurp_hrf',    'PCFG Surprisal — Distribution',   COL_PCFG,  "dist_pcfg.png")
+        _hist_one('fwprob5surp_hrf','5-gram Surprisal — Distribution', COL_G5,    "dist_5gram.png")
+        _hist_one('gpt2_surp_hrf',  'GPT-2 Surprisal — Distribution',  COL_GPT2,  "dist_gpt2.png")
 
-        plt.tight_layout()
-        _savefig(fig, "surprisal_overview.png", save_dir)
-        plt.show()
+        # --- Pairwise scatters (3 separate figures) ---
+        _scatter_one('totsurp_hrf','fwprob5surp_hrf','PCFG','5-gram', "scatter_pcfg_vs_5gram.png")
+        _scatter_one('totsurp_hrf','gpt2_surp_hrf', 'PCFG','GPT-2',   "scatter_pcfg_vs_gpt2.png")
+        _scatter_one('fwprob5surp_hrf','gpt2_surp_hrf','5-gram','GPT-2', "scatter_5gram_vs_gpt2.png")
+
+        # --- Bin counts (3 separate figures) ---
+        _bin_count_one('totsurp_hrf_bin',     'PCFG Surprisal — Bin Counts',   COL_PCFG, "bin_counts_pcfg.png")
+        _bin_count_one('fwprob5surp_hrf_bin', '5-gram Surprisal — Bin Counts', COL_G5,   "bin_counts_5gram.png")
+        _bin_count_one('gpt2_surp_hrf_bin',   'GPT-2 Surprisal — Bin Counts',  COL_GPT2, "bin_counts_gpt2.png")
 
     def summarize_bold_by_surprisal_bins(merged_df):
         merged_df = _rename_complexity_cols_to_surprisal(merged_df.copy())
@@ -462,7 +469,8 @@ def main():
         n_rows = (n_plots + n_cols - 1) // n_cols if n_plots else 1
 
         def _panel(metric_name, bin_col, color, marker='o'):
-            fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows))
+            # bigger canvas for readability
+            fig, axes = plt.subplots(n_rows, n_cols, figsize=(6.5*n_cols, 5.2*n_rows))
             axes = np.atleast_1d(axes).flatten()
 
             for i, froi in enumerate(frois):
@@ -479,35 +487,37 @@ def main():
                 xs = grp.index.values.astype(float)
                 ys = grp['mean'].values
 
-                ax.errorbar(xs, ys, yerr=se.values, marker=marker, capsize=3,
-                            linewidth=2, markersize=6, color=color, zorder=3)
-                ax.set_title(f'{froi} — {metric_name} Surprisal', fontsize=12)
-                ax.set_xlabel(f'{metric_name} Surprisal Bin'); ax.set_ylabel('BOLD')
+                ax.errorbar(xs, ys, yerr=se.values,
+                            marker=marker, capsize=4, linewidth=2.5, markersize=8,
+                            color=color, zorder=3)
+                ax.set_title(f'{froi} — {metric_name} Surprisal')
+                ax.set_xlabel(f'{metric_name} Surprisal Bin')
+                ax.set_ylabel('BOLD')
                 ax.grid(True, alpha=0.3, zorder=0)
 
+                # add simple linear trend (optional visual guide)
                 if len(xs) > 1 and np.nanstd(ys) > 0:
                     z = np.polyfit(xs, ys, 1); pfit = np.poly1d(z)
                     ax.plot(xs, pfit(xs), "--", alpha=0.9, color='red', zorder=4)
-                    # 🔶 draw the yellow r/p badge
-                    _rp_box(ax, xs, ys, loc=(0.05, 0.93))
 
+            # hide unused axes
             for k in range(n_plots, len(axes)):
                 axes[k].set_visible(False)
 
-            plt.suptitle(f'{metric_name} Surprisal Effects by fROI — {title_net}', fontsize=14, y=1.02)
+            plt.suptitle(f'{metric_name} Surprisal Effects by fROI — {title_net}', y=1.02)
             plt.tight_layout()
 
             fname = f"bold_by_bins_{metric_name.replace('-','_')}_{_slug(title_net)}.png"
             _savefig(fig, fname, save_dir)
-            plt.show()
+            plt.close(fig)
 
         pcfg_bin = REQ_SURP_COLS['pcfg'][1]
         g5_bin   = REQ_SURP_COLS['g5'][1]
         gpt2_bin = REQ_SURP_COLS['gpt2'][1]
 
-        _panel("PCFG",  pcfg_bin,  color=COL_PCFG,  marker='o')   # blue
-        _panel("5-gram", g5_bin,   color=COL_G5,    marker='s')   # orange
-        _panel("GPT-2",  gpt2_bin, color=COL_GPT2,  marker='^')   # green
+        _panel("PCFG",   pcfg_bin,  color=COL_PCFG,  marker='o')  # blue
+        _panel("5-gram", g5_bin,    color=COL_G5,    marker='s')  # orange
+        _panel("GPT-2",  gpt2_bin,  color=COL_GPT2,  marker='^')  # green
 
     def run_full_surprisal_pipeline(merged_df, n_bins=10, per_network_max_frois=6, save_dir=SAVE_DIR):
         print(f"Input rows: {len(merged_df):,}")
@@ -536,7 +546,7 @@ def main():
 
             nets = list(analyzed_df['network'].dropna().unique())
             for net in nets:
-                print(f"\n📊 Plotting per-fROI grids (network={net}) …")
+                print(f"\n Plotting per-fROI grids (network={net}) …")
                 plot_bold_by_surprisal_bins(analyzed_df, network_filter=net,
                                             max_plots=per_network_max_frois, save_dir=save_dir)
         else:
@@ -574,20 +584,20 @@ def main():
             xs = grp.index.values.astype(float)
             ys = grp['mean'].values
             plt.errorbar(xs, ys, yerr=se.values,
-                        marker='o', capsize=3, linewidth=2, markersize=6,
-                        color=cmap(i), alpha=0.9, label=str(froi))
+                        marker='o', capsize=4, linewidth=2.5, markersize=7,
+                        color=cmap(i), alpha=0.95, label=str(froi))
 
         metric_name = {'pcfg': 'PCFG', 'g5': '5-gram', 'gpt2': 'GPT-2'}[metric]
-        plt.title(f'{metric_name} Surprisal — All fROIs in One Plot', fontsize=14)
-        plt.xlabel(f'{metric_name} Surprisal Bin', fontsize=12)
-        plt.ylabel('BOLD', fontsize=12)
+        plt.title(f'{metric_name} Surprisal — All fROIs in One Plot')
+        plt.xlabel(f'{metric_name} Surprisal Bin')
+        plt.ylabel('BOLD')
         plt.grid(True, alpha=0.3)
-        plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=9)
+        plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', ncol=1, title="fROI")
         plt.tight_layout()
         plt.subplots_adjust(right=0.78)
 
         _savefig(fig, f"all_fROIs_{metric_name.replace('-','_')}.png", save_dir)
-        plt.show()
+        plt.close(fig)
 
     plot_all_frois_one_graph(analyzed_df, metric='pcfg', max_frois=12)
     plot_all_frois_one_graph(analyzed_df, metric='g5', max_frois=12)
