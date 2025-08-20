@@ -49,7 +49,7 @@ The provided code is focused on the **analysis** itself. If you would like to se
    conda activate cogsci-proj
    ```
 
-4. **Download the Data With Ready-to-Use GloVe Vectors**:
+4. **Download the Data Folder**:
    ```bash
    python code/data_download.py
    ```

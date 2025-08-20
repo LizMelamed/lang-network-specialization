@@ -499,7 +499,12 @@ def main():
                 if len(xs) > 1 and np.nanstd(ys) > 0:
                     z = np.polyfit(xs, ys, 1); pfit = np.poly1d(z)
                     ax.plot(xs, pfit(xs), "--", alpha=0.9, color='red', zorder=4)
-
+                if len(xs) > 1 and np.nanstd(ys) > 0:
+                    z = np.polyfit(xs, ys, 1); pfit = np.poly1d(z)
+                    ax.plot(xs, pfit(xs), "--", alpha=0.9, color='red', zorder=4)
+                    # add the yellow r/p badge
+                    _rp_box(ax, xs, ys, loc=(0.05, 0.92))
+            
             # hide unused axes
             for k in range(n_plots, len(axes)):
                 axes[k].set_visible(False)
