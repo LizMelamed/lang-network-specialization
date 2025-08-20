@@ -46,6 +46,24 @@ def main():
         fig.savefig(path, dpi=dpi, bbox_inches="tight")
         print(f" saved: {path}")
 
+    def _rp_box(ax, xs=None, ys=None, r=None, p=None,
+            loc=(0.02, 0.92), fontsize=16, pad=0.6, alpha=0.9):
+        if r is None or p is None:
+            if xs is None or ys is None:
+                return np.nan, np.nan
+            xs = np.asarray(xs, float); ys = np.asarray(ys, float)
+            m = np.isfinite(xs) & np.isfinite(ys)
+            if m.sum() < 2:
+                return np.nan, np.nan
+            r, p = pearsonr(xs[m], ys[m])
+
+        ax.text(loc[0], loc[1], f"r={r:.3f}, p={p:.3g}",
+                transform=ax.transAxes, fontsize=fontsize,
+                bbox=dict(boxstyle=f"round,pad={pad}",
+                        facecolor="yellow", edgecolor="black", alpha=alpha),
+                zorder=5)
+        return r, p
+
     # Ensure key columns are strings
     for c in ['docid', 'subject', 'fROI']:
         if c in pred_use.columns:
@@ -348,10 +366,6 @@ def main():
 
         return df, {'bin_edges': bin_edges, 'thresholds': thresholds}
 
-    def _rp_box(ax, r, p, loc=(0.05, 0.93)):
-        ax.text(loc[0], loc[1], f"r={r:.3f}, p={p:.3g}",
-                transform=ax.transAxes, fontsize=10,
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.75))
 
     def plot_surprisal_overview(df, save_dir=SAVE_DIR):
         _ensure_cols(df, ['totsurp_hrf','fwprob5surp_hrf','gpt2_surp_hrf'])
@@ -436,23 +450,6 @@ def main():
 
         return _agg(pcfg_bin), _agg(g5_bin), _agg(gpt2_bin)
 
-    def _rp_box(ax, xs, ys, loc=(0.05, 0.93)):
-        """Draw a small yellow box with Pearson r and p on the given axes."""
-        # guard against NaNs/inf
-        xs = np.asarray(xs, dtype=float)
-        ys = np.asarray(ys, dtype=float)
-        m = np.isfinite(xs) & np.isfinite(ys)
-        if m.sum() < 2:
-            return np.nan, np.nan
-        r, p = pearsonr(xs[m], ys[m])
-        ax.text(
-            loc[0], loc[1], f"r={r:.3f}, p={p:.3g}",
-            transform=ax.transAxes, fontsize=10,
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", edgecolor="black", alpha=0.85),
-            zorder=5
-        )
-        return r, p
-
     def plot_bold_by_surprisal_bins(merged_df, network_filter=None, max_plots=6, save_dir=SAVE_DIR):
         merged_df = _rename_complexity_cols_to_surprisal(merged_df.copy())
 
@@ -503,7 +500,7 @@ def main():
                     z = np.polyfit(xs, ys, 1); pfit = np.poly1d(z)
                     ax.plot(xs, pfit(xs), "--", alpha=0.9, color='red', zorder=4)
                     # add the yellow r/p badge
-                    _rp_box(ax, xs, ys, loc=(0.05, 0.92))
+                    _rp_box(ax, xs=xs, ys=ys, loc=(0.04, 0.92), fontsize=16)
             
             # hide unused axes
             for k in range(n_plots, len(axes)):
