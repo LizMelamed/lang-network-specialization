@@ -1,0 +1,11 @@
+data/
+results/
+*.parquet
+*.png
+*.pdf
+*.zip
+*.npy
+*.npz
+*.pt
+*.pth
+*.h5
